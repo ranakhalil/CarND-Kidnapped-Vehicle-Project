@@ -142,7 +142,7 @@ w = []
 for i in range(N):
     w.append(p[i].measurement_prob(Z))
     
-# insert code here!
+# git insert code here!
 print w # Please print w for grading purposes.
 
 
