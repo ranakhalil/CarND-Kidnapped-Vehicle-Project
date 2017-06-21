@@ -20,7 +20,7 @@
 
 using namespace std;
 
-static int NUM_PARTICLES = 800;
+static int NUM_PARTICLES = 900;
 
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
@@ -77,11 +77,11 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 	for (int i = 0; i < num_particles; i++)
 	{
-		if (fabs(yaw_rate) < 0.00001)
+		if (fabs(yaw_rate) < 0.0001)
 		{
 			particles[i].x +=  velocity * delta_t * cos(particles[i].theta);
 			particles[i].y += velocity * delta_t * sin(particles[i].theta);
-			particles[i].theta = particles[i].theta + 0.00001 * delta_t;
+			particles[i].theta = particles[i].theta + 0.0001 * delta_t;
 		}
 		else 
 		{
@@ -182,7 +182,6 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 			{
 				predictedLandmarks.push_back(LandmarkObs{ m_landmark.id_i, m_landmark.x_f, m_landmark.y_f });
 			}
-
 			//cout << "predicted landmarks : " << predictedLandmarks.size() << endl;
 		}
 
@@ -205,8 +204,6 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 		const double sigma_x = std_landmark[0];
 		const double sigma_y = std_landmark[1];
-
-		particles[i].weight = 1.0;
 
 		for (auto transObservation : transObservations)
 		{
@@ -262,7 +259,7 @@ void ParticleFilter::resample() {
 
 	for (int i = 0; i < num_particles; i++)
 	{
-		beta += dist(gen) * 1.5;
+		beta += dist(gen) * 2.0 * max_weight;
 		while (beta > current_weights[index])
 		{
 			beta -= current_weights[index];
