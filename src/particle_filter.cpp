@@ -20,7 +20,7 @@
 
 using namespace std;
 
-static int NUM_PARTICLES = 100;
+static int NUM_PARTICLES = 800;
 
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
@@ -44,21 +44,17 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 
 		// initialize all weights to 1
 		weights.resize(num_particles);
-		// initialize weights 
-		//fill(weights.begin(), weights.end(), 1.0);
 
 		for (int i = 0; i < num_particles; i++)
 		{
 			// Create the particle object with the random x and y values
-			Particle p;
-			p.id = i;
-			p.x = dist_x(random_engine);
-			p.y = dist_y(random_engine);
-			p.theta = dist_theta(random_engine);
+			particles[i].id = i;
+			particles[i].x = dist_x(random_engine);
+			particles[i].y = dist_y(random_engine);
+			particles[i].theta = dist_theta(random_engine);
 			// initialize weight to 1.0 as indicated by the instructions
-			p.weight = 1.0;
-			particles.push_back(p);
-			weights.push_back(1.0);
+			particles[i].weight = 1.0;
+			weights[i] = 1.0;
 		}
 		is_initialized = true;
 	}
@@ -81,10 +77,11 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 	for (int i = 0; i < num_particles; i++)
 	{
-		if (fabs(yaw_rate) < 0.0001)
+		if (fabs(yaw_rate) < 0.00001)
 		{
 			particles[i].x +=  velocity * delta_t * cos(particles[i].theta);
 			particles[i].y += velocity * delta_t * sin(particles[i].theta);
+			particles[i].theta = particles[i].theta + 0.00001 * delta_t;
 		}
 		else 
 		{
@@ -117,19 +114,27 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 	//   implement this method and use it as a helper during the updateWeights phase.
 	// Source Forum help: https://discussions.udacity.com/t/you-ran-out-of-time-when-running-with-the-simulator/269900/8
 
-	
+	double distance, min_distance;
+	int map_index;
+
 	for (unsigned int i = 0; i < observations.size(); i++)
 	{
-		const LandmarkObs observation = observations[i];
-		vector <double> distances;
-		for (auto prediction : predicted)
+		LandmarkObs observation = observations[i];
+		// Thanks to Jeremy Shanoon for teaching me about numeric_limits
+		min_distance = numeric_limits<double>::max();
+
+		for (unsigned int j = 0; j < predicted.size(); j++)
 		{
-			distances.push_back(dist(observation.x, observation.y, prediction.x, prediction.y));
+			LandmarkObs l = predicted[j];
+			distance = dist(observation.x, observation.y, l.x, l.y);
+
+			if (distance < min_distance)
+			{
+				min_distance = distance;
+				map_index = l.id;
+			}
 		}
-		
-		vector<double>::iterator min_result = min_element(begin(distances), end(distances));
-		LandmarkObs lm = predicted[distance(begin(distances), min_result)];
-		observations[i].id = lm.id;
+		observations[i].id = map_index;
 	}
 
 }
@@ -159,67 +164,71 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//weights.clear();
 	for (int i = 0; i < num_particles; i++)
 	{
-		particles[i].weight = 1.0;
-		Particle p = particles[i];
+		//particles[i].weight = 1.0;
+		//Particle p = particles[i];
 		vector<LandmarkObs> predictedLandmarks;
 
 		for (int l = 0; l < map_landmarks.landmark_list.size(); l++)
 		{
-			Map::single_landmark_s m_landmark = map_landmarks.landmark_list[l];
+			Map::single_landmark_s& m_landmark = map_landmarks.landmark_list[l];
 
 			// check if its in range
-			double distance = dist(m_landmark.x_f, m_landmark.y_f, p.x, p.y);
-			if (distance <= sensor_range * 1.5)
+			double distance = dist(m_landmark.x_f, m_landmark.y_f, particles[i].x, particles[i].y);
+			vector<double> particle_vector = { particles[i].x, particles[i].y };
+			vector <double> landmark_vector = { m_landmark.x_f, m_landmark.y_f };
+			double product = inner_product(particle_vector.begin(), particle_vector.end(), landmark_vector.begin(), 0.0);
+
+			if ( distance < sensor_range && product > 0)
 			{
-				vector<double> particle_vector = { p.x, p.y};
-				vector <double> landmark_vector = { m_landmark.x_f, m_landmark.y_f };
-				double product = inner_product(particle_vector.begin(), particle_vector.end(), landmark_vector.begin(), 0.0);
-				
-				if ( product >= 0)
-				{
-					predictedLandmarks.push_back(LandmarkObs{ m_landmark.id_i, m_landmark.x_f, m_landmark.y_f });
-				}
+				predictedLandmarks.push_back(LandmarkObs{ m_landmark.id_i, m_landmark.x_f, m_landmark.y_f });
 			}
+
+			//cout << "predicted landmarks : " << predictedLandmarks.size() << endl;
 		}
 
 		// Predicted observations
 		vector<LandmarkObs> transObservations;
 
-		for (int j = 0; j < observations.size(); j++)
+		for (auto obs : observations)
 		{
 			LandmarkObs transObservation;
-			LandmarkObs obs = observations[j];
 
-			transObservation.x = obs.x * cos(p.theta) - obs.y * sin(p.theta) + p.x;
-			transObservation.y = obs.x * sin(p.theta) + obs.y * cos(p.theta) + p.y;
+			transObservation.x = obs.x * cos(particles[i].theta) - obs.y * sin(particles[i].theta) + particles[i].x;
+			transObservation.y = obs.x * sin(particles[i].theta) + obs.y * cos(particles[i].theta) + particles[i].y;
 			transObservation.id = obs.id;
-			
 			transObservations.push_back(transObservation);
 		}
 
 		//cout << "Trans Observation : " << transObservations.size() << endl;
 		
-
 		dataAssociation(predictedLandmarks, transObservations);
 
-		for (unsigned int x = 0; x < transObservations.size(); x++)
+		const double sigma_x = std_landmark[0];
+		const double sigma_y = std_landmark[1];
+
+		particles[i].weight = 1.0;
+
+		for (auto transObservation : transObservations)
 		{
-			LandmarkObs observation = transObservations[x];
-			LandmarkObs assocLandmark = predictedLandmarks[observation.id];
+			LandmarkObs assocLandmark;
+			for (auto predicted : predictedLandmarks)
+			{
+				if (predicted.id == transObservation.id)
+				{
+					assocLandmark.id = predicted.id;
+					assocLandmark.x = predicted.x;
+					assocLandmark.y = assocLandmark.y;
+				}
+			}
+			 
+			double x_diff = pow(transObservation.x - assocLandmark.x, 2) /  (2 * pow(sigma_x, 2));
+			double y_diff = pow(transObservation.y - assocLandmark.y, 2) / (2 * pow(sigma_y, 2));
 
-			const double sigma_x = std_landmark[0];
-			const double sigma_y = std_landmark[1];
-
-			double x_diff = pow(observation.x - assocLandmark.x, 2) /  (2 * pow(sigma_x, 2));
-			double y_diff = pow(observation.y - assocLandmark.y, 2) / (2 * pow(sigma_y, 2));
-
-			particles[i].weight *= 1 / (2 * M_PI * sigma_x * sigma_y) * exp(-(x_diff + y_diff));
-
+			particles[i].weight *= (1 / (2 * M_PI * sigma_x * sigma_y)) * exp(-(x_diff + y_diff));
 			//cout << "id: " << particles[i].id << " x: " << particles[i].x << " y: " << particles[i].y << " theta: " << particles[i].theta << "weights : " << particles[i].weight << "\n";
 		}
 		
-		weights.push_back(particles[i].weight);
-		
+		weights[i] = particles[i].weight;
 	}
 }
 
@@ -229,20 +238,37 @@ void ParticleFilter::resample() {
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
 	//   https://stackoverflow.com/questions/40275512/how-to-generate-random-numbers-between-2-values-inclusive
 	//   http://www.cplusplus.com/reference/algorithm/max_element/
+
 	vector<Particle> resample_particles;
 	random_device rd;
 	mt19937 gen(rd());
-	discrete_distribution<> dist(weights.begin(), weights.end());
-	resample_particles.resize(num_particles);
+
+	vector<double> current_weights;
+
 
 	for (int j = 0; j < particles.size(); j++)
 	{
-		weights[j] = particles[j].weight;
+		current_weights.push_back(particles[j].weight);
 	}
+
+	double max_weight = *max_element(current_weights.begin(), current_weights.end());
 	
+	// random index
+	uniform_int_distribution<> uni(0, num_particles - 1);
+	auto index = uni(gen);
+
+	discrete_distribution<> dist(0.0, max_weight);
+	double beta = 0.0;
+
 	for (int i = 0; i < num_particles; i++)
 	{
-		resample_particles.push_back(particles[dist(gen)]);
+		beta += dist(gen) * 1.5;
+		while (beta > current_weights[index])
+		{
+			beta -= current_weights[index];
+			index = (index + 1) % num_particles;
+		}
+		resample_particles.push_back(particles[index]);
 	}
 	particles = resample_particles;
 }
@@ -292,15 +318,4 @@ string ParticleFilter::getSenseY(Particle best)
     string s = ss.str();
     s = s.substr(0, s.length()-1);  // get rid of the trailing space
     return s;
-}
-
-void ParticleFilter::write(std::string filename)
-{
-	ofstream file;
-	file.open(filename, std::ios::app);
-	for (auto particle : particles)
-	{
-		file << particle.x << " " << particle.y << " " << particle.theta << endl;
-	}
-	file.close();
 }
