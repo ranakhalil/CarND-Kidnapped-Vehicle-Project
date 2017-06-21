@@ -20,8 +20,7 @@
 
 using namespace std;
 
-static int NUM_PARTICLES = 500;
-
+static int NUM_PARTICLES = 60;
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	// TODO: Set the number of particles. Initialize all particles to first position (based on estimates of 
