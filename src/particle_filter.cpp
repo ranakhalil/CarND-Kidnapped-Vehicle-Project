@@ -20,7 +20,7 @@
 
 using namespace std;
 
-static int NUM_PARTICLES = 900;
+static int NUM_PARTICLES = 500;
 
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
@@ -174,11 +174,13 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 			// check if its in range
 			double distance = dist(m_landmark.x_f, m_landmark.y_f, particles[i].x, particles[i].y);
-			vector<double> particle_vector = { particles[i].x, particles[i].y };
-			vector <double> landmark_vector = { m_landmark.x_f, m_landmark.y_f };
-			double product = inner_product(particle_vector.begin(), particle_vector.end(), landmark_vector.begin(), 0.0);
 
-			if ( distance < sensor_range && product > 0)
+			// Inner product to get projection to idenity closest and nearest neighbors .. didn't quiet work though
+			//vector<double> particle_vector = { particles[i].x, particles[i].y };
+			//vector <double> landmark_vector = { m_landmark.x_f, m_landmark.y_f };
+			//double product = inner_product(particle_vector.begin(), particle_vector.end(), landmark_vector.begin(), 0.0);
+
+			if ( distance < sensor_range)
 			{
 				predictedLandmarks.push_back(LandmarkObs{ m_landmark.id_i, m_landmark.x_f, m_landmark.y_f });
 			}
@@ -205,6 +207,9 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 		const double sigma_x = std_landmark[0];
 		const double sigma_y = std_landmark[1];
 
+		// Re-initialize weight here to avoid multiplying an unkown value when calculating the bivariate probability below.
+		particles[i].weight = 1.0;
+
 		for (auto transObservation : transObservations)
 		{
 			LandmarkObs assocLandmark;
@@ -214,7 +219,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 				{
 					assocLandmark.id = predicted.id;
 					assocLandmark.x = predicted.x;
-					assocLandmark.y = assocLandmark.y;
+					assocLandmark.y = predicted.y;
 				}
 			}
 			 
@@ -236,38 +241,24 @@ void ParticleFilter::resample() {
 	//   https://stackoverflow.com/questions/40275512/how-to-generate-random-numbers-between-2-values-inclusive
 	//   http://www.cplusplus.com/reference/algorithm/max_element/
 
-	vector<Particle> resample_particles;
-	random_device rd;
-	mt19937 gen(rd());
+	vector<Particle> new_particles;
+	random_device seed;
+	mt19937 random_generator(seed());
 
 	vector<double> current_weights;
-
 
 	for (int j = 0; j < particles.size(); j++)
 	{
 		current_weights.push_back(particles[j].weight);
 	}
 
-	double max_weight = *max_element(current_weights.begin(), current_weights.end());
-	
-	// random index
-	uniform_int_distribution<> uni(0, num_particles - 1);
-	auto index = uni(gen);
-
-	discrete_distribution<> dist(0.0, max_weight);
-	double beta = 0.0;
+	discrete_distribution<> sample(weights.begin(), weights.end());
 
 	for (int i = 0; i < num_particles; i++)
 	{
-		beta += dist(gen) * 2.0 * max_weight;
-		while (beta > current_weights[index])
-		{
-			beta -= current_weights[index];
-			index = (index + 1) % num_particles;
-		}
-		resample_particles.push_back(particles[index]);
+		new_particles.push_back(particles[sample(random_generator)]);
 	}
-	particles = resample_particles;
+	particles = new_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
